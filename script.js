@@ -305,11 +305,7 @@
         return;
       }
 
-      var message = [
-        PAGE_CONFIG.leadIntentText,
-        'Nome: ' + name,
-        'WhatsApp: ' + phone
-      ].join('\n');
+      var message = PAGE_CONFIG.leadIntentText;
 
       sendLeadToSheet(buildLeadPayload(name, phone));
       window.open(buildWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
