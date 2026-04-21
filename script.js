@@ -7,8 +7,8 @@
     whatsappNumber: '5531982434238',
     instagramUrl: 'https://instagram.com/kp.estetica',
     mapsUrl: 'https://share.google/CAKNbxwuJpxjZjeY9',
-    defaultWhatsAppBaseText: 'Oi! Quero agendar uma limpeza de pele premium na Clínica Kelly Peçanha.',
-    defaultLeadIntentText: 'Oi! Quero agendar uma limpeza de pele premium.',
+    defaultWhatsAppBaseText: 'Oi, gostaria de mais informações sobre a limpeza de pele.',
+    defaultLeadIntentText: 'Oi, gostaria de mais informações sobre a limpeza de pele.',
     defaultLeadsWebhookUrl: ''
   };
 
