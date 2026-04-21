@@ -33,17 +33,31 @@
   }
 
   function buildLeadPayload(name, phone) {
+    var dateValue = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    var siteValue = window.location.href;
     return {
-      data: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      data: dateValue,
       nome: name,
       whatsapp: phone,
-      site: window.location.href
+      site: siteValue,
+      Data: dateValue,
+      Nome: name,
+      WhatsApp: phone,
+      Site: siteValue
     };
   }
 
   function sendLeadToSheet(payload) {
     var webhookUrl = String(PAGE_CONFIG.leadsWebhookUrl || '').trim();
     if (!webhookUrl) return;
+
+    var bodyText = JSON.stringify(payload);
+
+    if (navigator.sendBeacon) {
+      var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
+      var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
+      if (queued) return;
+    }
 
     fetch(webhookUrl, {
       method: 'POST',
@@ -52,7 +66,7 @@
       headers: {
         'Content-Type': 'text/plain;charset=utf-8'
       },
-      body: JSON.stringify(payload)
+      body: bodyText
     }).catch(function () {
       return null;
     });
