@@ -69,6 +69,7 @@
 
     document.querySelectorAll('[data-whatsapp-direct]').forEach(function (link) {
       link.href = buildWhatsAppUrl(PAGE_CONFIG.whatsappBaseText);
+      link.classList.add('js-open-modal');
     });
 
     document.querySelectorAll('.js-open-modal').forEach(function (btn) {
