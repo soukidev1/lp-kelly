@@ -8,12 +8,14 @@
     instagramUrl: 'https://instagram.com/kp.estetica',
     mapsUrl: 'https://share.google/CAKNbxwuJpxjZjeY9',
     defaultWhatsAppBaseText: 'Oi! Quero agendar uma limpeza de pele premium na Clínica Kelly Peçanha.',
-    defaultLeadIntentText: 'Oi! Quero agendar uma limpeza de pele premium.'
+    defaultLeadIntentText: 'Oi! Quero agendar uma limpeza de pele premium.',
+    defaultLeadsWebhookUrl: ''
   };
 
   var PAGE_CONFIG = {
     whatsappBaseText: (body && body.dataset.whatsappBaseText) || CONFIG.defaultWhatsAppBaseText,
-    leadIntentText: (body && body.dataset.leadIntentText) || CONFIG.defaultLeadIntentText
+    leadIntentText: (body && body.dataset.leadIntentText) || CONFIG.defaultLeadIntentText,
+    leadsWebhookUrl: (body && body.dataset.leadsWebhookUrl) || CONFIG.defaultLeadsWebhookUrl
   };
 
   var navbar = document.getElementById('navbar');
@@ -28,6 +30,32 @@
     var base = 'https://api.whatsapp.com/send/?phone=' + CONFIG.whatsappNumber;
     if (!message) return base;
     return base + '&text=' + encodeURIComponent(message);
+  }
+
+  function buildLeadPayload(name, phone) {
+    return {
+      data: new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+      nome: name,
+      whatsapp: phone,
+      site: window.location.href
+    };
+  }
+
+  function sendLeadToSheet(payload) {
+    var webhookUrl = String(PAGE_CONFIG.leadsWebhookUrl || '').trim();
+    if (!webhookUrl) return;
+
+    fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(payload)
+    }).catch(function () {
+      return null;
+    });
   }
 
   function bindStaticLinks() {
@@ -268,6 +296,7 @@
         'WhatsApp: ' + phone
       ].join('\n');
 
+      sendLeadToSheet(buildLeadPayload(name, phone));
       window.open(buildWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
       closeModal();
     });
