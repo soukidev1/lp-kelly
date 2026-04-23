@@ -49,17 +49,17 @@
 
   function sendLeadToSheet(payload) {
     var webhookUrl = String(PAGE_CONFIG.leadsWebhookUrl || '').trim();
-    if (!webhookUrl) return;
+    if (!webhookUrl) return Promise.resolve('missing-webhook');
 
     var bodyText = JSON.stringify(payload);
 
     if (navigator.sendBeacon) {
       var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
       var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
-      if (queued) return;
+      if (queued) return Promise.resolve('beacon');
     }
 
-    fetch(webhookUrl, {
+    return fetch(webhookUrl, {
       method: 'POST',
       mode: 'no-cors',
       keepalive: true,
@@ -67,9 +67,26 @@
         'Content-Type': 'text/plain;charset=utf-8'
       },
       body: bodyText
-    }).catch(function () {
-      return null;
-    });
+    })
+      .then(function () { return 'fetch'; })
+      .catch(function () { return 'fetch-error'; });
+  }
+
+  function waitForLeadDispatch(sendPromise, timeoutMs) {
+    return Promise.race([
+      Promise.resolve(sendPromise),
+      new Promise(function (resolve) {
+        setTimeout(function () {
+          resolve('timeout');
+        }, timeoutMs);
+      })
+    ]);
+  }
+
+  function isMobileDevice() {
+    var mobileByAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    var mobileByViewport = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+    return mobileByAgent || !!mobileByViewport;
   }
 
   function bindStaticLinks() {
@@ -306,10 +323,25 @@
       }
 
       var message = PAGE_CONFIG.leadIntentText;
+      var whatsappUrl = buildWhatsAppUrl(message);
+      var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(buildLeadPayload(name, phone)), 900);
 
-      sendLeadToSheet(buildLeadPayload(name, phone));
-      window.open(buildWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
-      closeModal();
+      function redirectToWhatsApp() {
+        if (isMobileDevice()) {
+          window.location.href = whatsappUrl;
+          return;
+        }
+
+        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      sendLeadPromise.then(function () {
+        redirectToWhatsApp();
+        closeModal();
+      }).catch(function () {
+        redirectToWhatsApp();
+        closeModal();
+      });
     });
   }
 
