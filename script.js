@@ -25,7 +25,7 @@
   var leadForm = document.getElementById('leadForm');
   var leadPhone = document.getElementById('leadPhone');
   var phoneError = document.getElementById('phoneError');
-  var LEAD_DISPATCH_TIMEOUT_MS = 2200;
+  var LEAD_DISPATCH_TIMEOUT_MS = 4500;
   var PENDING_LEAD_STORAGE_KEY = 'kp_pending_lead_v1';
 
   function buildWhatsAppUrl(message) {
@@ -155,10 +155,10 @@
     ]);
   }
 
-  function isMobileDevice() {
-    var mobileByAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-    var mobileByViewport = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
-    return mobileByAgent || !!mobileByViewport;
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
   }
 
   function bindStaticLinks() {
@@ -404,27 +404,17 @@
       var message = PAGE_CONFIG.leadIntentText;
       var leadPayload = buildLeadPayload(name, phone);
       var whatsappUrl = buildWhatsAppUrl(message);
-      var whatsappWindow = window.open('', '_blank', 'noopener,noreferrer');
 
       savePendingLead(leadPayload);
 
       var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(leadPayload), LEAD_DISPATCH_TIMEOUT_MS);
 
       function redirectToWhatsApp() {
-        if (whatsappWindow && !whatsappWindow.closed) {
-          whatsappWindow.location = whatsappUrl;
-          return;
-        }
-
-        if (isMobileDevice()) {
-          window.location.assign(whatsappUrl);
-          return;
-        }
-
-        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+        window.location.assign(whatsappUrl);
       }
 
-      sendLeadPromise.then(function (status) {
+      Promise.allSettled([sendLeadPromise, delay(900)]).then(function (results) {
+        var status = results[0] && results[0].value;
         if (status !== 'failed' && status !== 'timeout') clearPendingLead();
         redirectToWhatsApp();
         closeModal();
