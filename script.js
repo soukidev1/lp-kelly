@@ -44,10 +44,13 @@
     var dateValue = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     var siteValue = window.location.href;
     return {
+      date: dateValue,
+      name: name,
+      phone: phone,
+      site: siteValue,
       data: dateValue,
       nome: name,
       whatsapp: phone,
-      site: siteValue,
       Data: dateValue,
       Nome: name,
       WhatsApp: phone,
@@ -55,16 +58,26 @@
     };
   }
 
+  function buildLeadFormEncoded(payload) {
+    return new URLSearchParams({
+      date: payload.date || payload.data || '',
+      name: payload.name || payload.nome || '',
+      phone: payload.phone || payload.whatsapp || '',
+      site: payload.site || payload.Site || ''
+    });
+  }
+
   function sendLeadToSheet(payload) {
     var webhookUrl = String(PAGE_CONFIG.leadsWebhookUrl || '').trim();
     if (!webhookUrl) return Promise.resolve('missing-webhook');
 
-    var bodyText = JSON.stringify(payload);
+    var formData = buildLeadFormEncoded(payload);
+    var bodyText = formData.toString();
     var requestOptions = {
       method: 'POST',
       mode: 'no-cors',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
       },
       body: bodyText
     };
@@ -75,7 +88,7 @@
       .then(function () { return 'fetch'; })
       .catch(function () {
         if (navigator.sendBeacon) {
-          var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
+          var beaconBlob = new Blob([bodyText], { type: 'application/x-www-form-urlencoded;charset=UTF-8' });
           var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
           if (queued) return 'beacon';
         }
@@ -90,13 +103,9 @@
 
   function sendLeadByImageGet(webhookUrl, payload) {
     return new Promise(function (resolve) {
+      var formData = buildLeadFormEncoded(payload);
       var separator = webhookUrl.indexOf('?') === -1 ? '?' : '&';
-      var url = webhookUrl + separator + new URLSearchParams({
-        data: payload.data || '',
-        nome: payload.nome || '',
-        whatsapp: payload.whatsapp || '',
-        site: payload.site || ''
-      }).toString();
+      var url = webhookUrl + separator + formData.toString();
 
       var img = new Image();
       var settled = false;
@@ -154,8 +163,8 @@
     var payload = readPendingLead();
     if (!webhookUrl || !payload || !navigator.sendBeacon) return false;
 
-    var bodyText = JSON.stringify(payload);
-    var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
+    var formData = buildLeadFormEncoded(payload);
+    var beaconBlob = new Blob([formData.toString()], { type: 'application/x-www-form-urlencoded;charset=UTF-8' });
     var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
     if (queued) clearPendingLead();
     return queued;
