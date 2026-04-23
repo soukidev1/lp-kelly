@@ -199,6 +199,12 @@
     });
   }
 
+  function isMobileDevice() {
+    var mobileByAgent = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    var mobileByViewport = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+    return mobileByAgent || !!mobileByViewport;
+  }
+
   function bindStaticLinks() {
     document.querySelectorAll('[data-instagram-link]').forEach(function (link) {
       link.href = CONFIG.instagramUrl;
@@ -442,16 +448,22 @@
       var message = PAGE_CONFIG.leadIntentText;
       var leadPayload = buildLeadPayload(name, phone);
       var whatsappUrl = buildWhatsAppUrl(message);
+      var isMobile = isMobileDevice();
 
       savePendingLead(leadPayload);
 
       var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(leadPayload), LEAD_DISPATCH_TIMEOUT_MS);
 
       function redirectToWhatsApp() {
-        window.location.assign(whatsappUrl);
+        if (isMobile) {
+          window.location.assign(whatsappUrl);
+          return;
+        }
+
+        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
       }
 
-      Promise.allSettled([sendLeadPromise, delay(900)]).then(function (results) {
+      Promise.allSettled([sendLeadPromise, delay(isMobile ? 1200 : 300)]).then(function (results) {
         var sendResult = results[0];
         var status = sendResult && sendResult.status === 'fulfilled' ? sendResult.value : 'failed';
         if (LEAD_SUCCESS_STATUS[status]) clearPendingLead();
