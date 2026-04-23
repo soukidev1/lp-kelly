@@ -27,6 +27,12 @@
   var phoneError = document.getElementById('phoneError');
   var LEAD_DISPATCH_TIMEOUT_MS = 4500;
   var PENDING_LEAD_STORAGE_KEY = 'kp_pending_lead_v1';
+  var LEAD_SUCCESS_STATUS = {
+    fetch: true,
+    beacon: true,
+    'fetch-keepalive': true,
+    'img-get': true
+  };
 
   function buildWhatsAppUrl(message) {
     var base = 'https://api.whatsapp.com/send/?phone=' + CONFIG.whatsappNumber;
@@ -76,8 +82,40 @@
 
         return fetch(webhookUrl, Object.assign({}, requestOptions, { keepalive: true }))
           .then(function () { return 'fetch-keepalive'; })
-          .catch(function () { return 'failed'; });
+          .catch(function () {
+            return sendLeadByImageGet(webhookUrl, payload);
+          });
       });
+  }
+
+  function sendLeadByImageGet(webhookUrl, payload) {
+    return new Promise(function (resolve) {
+      var separator = webhookUrl.indexOf('?') === -1 ? '?' : '&';
+      var url = webhookUrl + separator + new URLSearchParams({
+        data: payload.data || '',
+        nome: payload.nome || '',
+        whatsapp: payload.whatsapp || '',
+        site: payload.site || ''
+      }).toString();
+
+      var img = new Image();
+      var settled = false;
+
+      function done(status) {
+        if (settled) return;
+        settled = true;
+        resolve(status);
+      }
+
+      img.onload = function () { done('img-get'); };
+      img.onerror = function () { done('failed'); };
+
+      setTimeout(function () {
+        done('failed');
+      }, 2500);
+
+      img.src = url;
+    });
   }
 
   function savePendingLead(payload) {
@@ -129,7 +167,7 @@
     var pendingPayload = readPendingLead();
     if (pendingPayload) {
       sendLeadToSheet(pendingPayload).then(function (status) {
-        if (status !== 'failed') clearPendingLead();
+        if (LEAD_SUCCESS_STATUS[status]) clearPendingLead();
       });
     }
 
@@ -414,8 +452,9 @@
       }
 
       Promise.allSettled([sendLeadPromise, delay(900)]).then(function (results) {
-        var status = results[0] && results[0].value;
-        if (status !== 'failed' && status !== 'timeout') clearPendingLead();
+        var sendResult = results[0];
+        var status = sendResult && sendResult.status === 'fulfilled' ? sendResult.value : 'failed';
+        if (LEAD_SUCCESS_STATUS[status]) clearPendingLead();
         redirectToWhatsApp();
         closeModal();
       }).catch(function () {
