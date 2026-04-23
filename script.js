@@ -25,6 +25,7 @@
   var leadForm = document.getElementById('leadForm');
   var leadPhone = document.getElementById('leadPhone');
   var phoneError = document.getElementById('phoneError');
+  var LEAD_DISPATCH_TIMEOUT_MS = 2200;
 
   function buildWhatsAppUrl(message) {
     var base = 'https://api.whatsapp.com/send/?phone=' + CONFIG.whatsappNumber;
@@ -52,24 +53,30 @@
     if (!webhookUrl) return Promise.resolve('missing-webhook');
 
     var bodyText = JSON.stringify(payload);
-
-    if (navigator.sendBeacon) {
-      var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
-      var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
-      if (queued) return Promise.resolve('beacon');
-    }
-
-    return fetch(webhookUrl, {
+    var requestOptions = {
       method: 'POST',
       mode: 'no-cors',
-      keepalive: true,
       headers: {
         'Content-Type': 'text/plain;charset=utf-8'
       },
       body: bodyText
-    })
+    };
+
+    // On mobile, waiting for a regular fetch before navigating is more reliable
+    // than relying only on sendBeacon during app-switch to WhatsApp.
+    return fetch(webhookUrl, requestOptions)
       .then(function () { return 'fetch'; })
-      .catch(function () { return 'fetch-error'; });
+      .catch(function () {
+        if (navigator.sendBeacon) {
+          var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
+          var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
+          if (queued) return 'beacon';
+        }
+
+        return fetch(webhookUrl, Object.assign({}, requestOptions, { keepalive: true }))
+          .then(function () { return 'fetch-keepalive'; })
+          .catch(function () { return 'failed'; });
+      });
   }
 
   function waitForLeadDispatch(sendPromise, timeoutMs) {
@@ -281,6 +288,8 @@
 
   function setupModal() {
     if (!modal || !leadForm) return;
+    var submitButton = leadForm.querySelector('button[type="submit"]');
+    var defaultSubmitText = submitButton ? submitButton.textContent : '';
 
     document.querySelectorAll('.js-open-modal').forEach(function (trigger) {
       trigger.addEventListener('click', openModal);
@@ -322,13 +331,18 @@
         return;
       }
 
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Enviando...';
+      }
+
       var message = PAGE_CONFIG.leadIntentText;
       var whatsappUrl = buildWhatsAppUrl(message);
-      var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(buildLeadPayload(name, phone)), 900);
+      var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(buildLeadPayload(name, phone)), LEAD_DISPATCH_TIMEOUT_MS);
 
       function redirectToWhatsApp() {
         if (isMobileDevice()) {
-          window.location.href = whatsappUrl;
+          window.location.assign(whatsappUrl);
           return;
         }
 
@@ -341,6 +355,10 @@
       }).catch(function () {
         redirectToWhatsApp();
         closeModal();
+      }).finally(function () {
+        if (!submitButton) return;
+        submitButton.disabled = false;
+        submitButton.textContent = defaultSubmitText;
       });
     });
   }
