@@ -26,6 +26,7 @@
   var leadPhone = document.getElementById('leadPhone');
   var phoneError = document.getElementById('phoneError');
   var LEAD_DISPATCH_TIMEOUT_MS = 2200;
+  var PENDING_LEAD_STORAGE_KEY = 'kp_pending_lead_v1';
 
   function buildWhatsAppUrl(message) {
     var base = 'https://api.whatsapp.com/send/?phone=' + CONFIG.whatsappNumber;
@@ -77,6 +78,70 @@
           .then(function () { return 'fetch-keepalive'; })
           .catch(function () { return 'failed'; });
       });
+  }
+
+  function savePendingLead(payload) {
+    try {
+      localStorage.setItem(PENDING_LEAD_STORAGE_KEY, JSON.stringify({
+        payload: payload,
+        createdAt: Date.now()
+      }));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function readPendingLead() {
+    try {
+      var value = localStorage.getItem(PENDING_LEAD_STORAGE_KEY);
+      if (!value) return null;
+      var parsed = JSON.parse(value);
+      if (!parsed || !parsed.payload) return null;
+      return parsed.payload;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearPendingLead() {
+    try {
+      localStorage.removeItem(PENDING_LEAD_STORAGE_KEY);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function flushPendingLeadWithBeacon() {
+    var webhookUrl = String(PAGE_CONFIG.leadsWebhookUrl || '').trim();
+    var payload = readPendingLead();
+    if (!webhookUrl || !payload || !navigator.sendBeacon) return false;
+
+    var bodyText = JSON.stringify(payload);
+    var beaconBlob = new Blob([bodyText], { type: 'text/plain;charset=UTF-8' });
+    var queued = navigator.sendBeacon(webhookUrl, beaconBlob);
+    if (queued) clearPendingLead();
+    return queued;
+  }
+
+  function setupPendingLeadRescue() {
+    if (!PAGE_CONFIG.leadsWebhookUrl) return;
+
+    var pendingPayload = readPendingLead();
+    if (pendingPayload) {
+      sendLeadToSheet(pendingPayload).then(function (status) {
+        if (status !== 'failed') clearPendingLead();
+      });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') {
+        flushPendingLeadWithBeacon();
+      }
+    });
+
+    window.addEventListener('pagehide', function () {
+      flushPendingLeadWithBeacon();
+    });
   }
 
   function waitForLeadDispatch(sendPromise, timeoutMs) {
@@ -337,10 +402,20 @@
       }
 
       var message = PAGE_CONFIG.leadIntentText;
+      var leadPayload = buildLeadPayload(name, phone);
       var whatsappUrl = buildWhatsAppUrl(message);
-      var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(buildLeadPayload(name, phone)), LEAD_DISPATCH_TIMEOUT_MS);
+      var whatsappWindow = window.open('', '_blank', 'noopener,noreferrer');
+
+      savePendingLead(leadPayload);
+
+      var sendLeadPromise = waitForLeadDispatch(sendLeadToSheet(leadPayload), LEAD_DISPATCH_TIMEOUT_MS);
 
       function redirectToWhatsApp() {
+        if (whatsappWindow && !whatsappWindow.closed) {
+          whatsappWindow.location = whatsappUrl;
+          return;
+        }
+
         if (isMobileDevice()) {
           window.location.assign(whatsappUrl);
           return;
@@ -349,7 +424,8 @@
         window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
       }
 
-      sendLeadPromise.then(function () {
+      sendLeadPromise.then(function (status) {
+        if (status !== 'failed' && status !== 'timeout') clearPendingLead();
         redirectToWhatsApp();
         closeModal();
       }).catch(function () {
@@ -439,6 +515,7 @@
   setupNavbar();
   setupReveal();
   setupCarousel();
+  setupPendingLeadRescue();
   setupModal();
   setupClinicHours();
 })();
