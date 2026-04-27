@@ -13,6 +13,7 @@
   };
 
   var PAGE_CONFIG = {
+    procedureName: (body && body.dataset.procedureName) || '',
     whatsappBaseText: (body && body.dataset.whatsappBaseText) || CONFIG.defaultWhatsAppBaseText,
     leadIntentText: (body && body.dataset.leadIntentText) || CONFIG.defaultLeadIntentText,
     leadsWebhookUrl: (body && body.dataset.leadsWebhookUrl) || CONFIG.defaultLeadsWebhookUrl
@@ -40,14 +41,39 @@
     return base + '&text=' + encodeURIComponent(message);
   }
 
+  function getProcedureNameFromUrl(url) {
+    var value = String(url || '').trim();
+    if (!value) return '';
+
+    try {
+      var parsedUrl = new URL(value, window.location.origin);
+      if (parsedUrl.pathname.indexOf('/depilacao') !== -1) return 'Depilação a Laser';
+      return 'Limpeza de Pele';
+    } catch (error) {
+      if (value.indexOf('depilacao') !== -1) return 'Depilação a Laser';
+      return '';
+    }
+  }
+
+  function getLeadSiteValue(payload) {
+    var procedureName = String((payload && (payload.procedureName || payload.procedimento)) || '').trim();
+    if (procedureName) return procedureName;
+
+    var siteValue = String((payload && (payload.site || payload.Site)) || '').trim();
+    if (siteValue && !/^https?:\/\//i.test(siteValue)) return siteValue;
+
+    return PAGE_CONFIG.procedureName || getProcedureNameFromUrl(siteValue || window.location.href) || siteValue || window.location.href;
+  }
+
   function buildLeadPayload(name, phone) {
     var dateValue = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    var siteValue = window.location.href;
+    var siteValue = getLeadSiteValue();
     return {
       date: dateValue,
       name: name,
       phone: phone,
       site: siteValue,
+      procedureName: siteValue,
       data: dateValue,
       nome: name,
       whatsapp: phone,
@@ -59,11 +85,12 @@
   }
 
   function buildLeadFormEncoded(payload) {
+    var siteValue = getLeadSiteValue(payload);
     return new URLSearchParams({
       date: payload.date || payload.data || '',
       name: payload.name || payload.nome || '',
       phone: payload.phone || payload.whatsapp || '',
-      site: payload.site || payload.Site || ''
+      site: siteValue
     });
   }
 
